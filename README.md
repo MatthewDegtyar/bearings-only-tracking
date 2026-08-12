@@ -48,13 +48,15 @@ initialise well, and the cubature filter is worth its cost when you cannot.
 The degree-5 rule tracks the library degree-3 rule closely here, so the extra
 points do not pay for themselves at this operating point.
 
-## The filters are not mine
+## The estimators are off the shelf
 
-Both estimators come from [FilterPy](https://github.com/rlabbe/filterpy):
-`ExtendedKalmanFilter` and `CubatureKalmanFilter`. `kf2/filters.py` is a thin
-adapter that supplies what a bearings-only problem needs on top of them, and
-nothing else. Every departure from stock library behaviour is listed in
-`kf2.filters.DEVIATIONS` with the reason, and each is tested.
+That is deliberate. A comparison between two algorithms is only worth reading if
+it measures the algorithms rather than my implementation of them, so both come
+from [FilterPy](https://github.com/rlabbe/filterpy): `ExtendedKalmanFilter` and
+`CubatureKalmanFilter`. `kf2/filters.py` is a thin adapter supplying what a
+bearings-only problem needs on top of them, and nothing else. Every departure
+from stock library behaviour is listed in `kf2.filters.DEVIATIONS` with the
+reason, and each is tested.
 
 There is one modified estimator, `kf2/ckf5.py`. FilterPy implements the
 third-degree cubature rule; that module is the same sampling update at degree 5.
