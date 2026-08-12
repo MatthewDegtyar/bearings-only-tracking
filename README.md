@@ -12,6 +12,42 @@ filter earns its place over the EKF.
 - four geometries, both filters drawn together with their uncertainty ellipses,
 and the ensemble comparison underneath. No install, nothing to run.
 
+![One engagement, plan view](docs/img/engagement.png)
+
+The observer knows where it is and what direction the target is in. It is never
+told how far away the target is. Range comes out of the geometry: the covariance
+ellipses are long along the line of sight and thin across it, because a bearing
+pins down the direction and says nothing about the distance.
+
+## What the four scenarios show
+
+![The four scenarios](docs/img/scenarios.png)
+
+The scenario that looks cleanest is not the one that tracks best. Case 3 holds
+the target in frame almost the whole run, 3 percent track loss, but its observer
+flies dead straight, and against a constant-velocity target that geometry cannot
+recover range: it improves range error only 20 percent over its starting guess.
+Case 2 wins because its observer weaves, which is what makes range observable at
+all. Case 1 is the textbook triangulation setup, a static target with a turning
+observer, and it comes last because the target leaves the field of view 40
+percent of the time.
+
+The geometry that ranges a target and the geometry that keeps it in frame are
+not the same geometry.
+
+## EKF against the cubature filter
+
+![NEES departure against prior width](docs/img/ekf-vs-ckf.png)
+
+Both filters are fine when the starting guess is good. They separate as it gets
+worse: at 1000 m of initial position uncertainty the EKF understates its own
+error by 122 percent while the cubature filter is at 15 percent. That is the
+answer to the second question. The EKF is cheaper and adequate when you can
+initialise well, and the cubature filter is worth its cost when you cannot.
+
+The degree-5 rule tracks the library degree-3 rule closely here, so the extra
+points do not pay for themselves at this operating point.
+
 ## The filters are not mine
 
 Both estimators come from [FilterPy](https://github.com/rlabbe/filterpy):
@@ -57,6 +93,7 @@ python3 -m pytest -q                                   # ~3 min
 python3 scripts/sweep.py                               # initial-uncertainty sweep
 python3 scripts/export_cases.py                        # the four scenarios
 python3 scripts/make_sim_report.py                     # rebuild the report
+python3 scripts/make_readme_figures.py                 # the figures above
 python3 scripts/make_viz.py --data results/cases.json \
     --out viz/compare.html --template scripts/viz_compare.html --serve --pages
 ```
@@ -82,3 +119,6 @@ kf2/run.py         one filter loop, shared by the statistics and the figures
 kf2/evaluation.py  NEES, NIS, resolution, verdicts
 kf2/gating.py      validation gate and association
 ```
+
+Figures are regenerated from `results/` by `scripts/make_readme_figures.py`, so
+they cannot drift from the data they describe.
