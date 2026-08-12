@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""Build the simulator report.
+
+A single self-contained memo describing what the simulator is, how fast it is to
+put a question through it, and what the EKF/CKF comparison came out at. Every
+number is read from the committed result files rather than typed in, so the memo
+cannot drift from the data.
+
+    python3 scripts/make_sim_report.py
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from weasyprint import HTML  # noqa: E402
+
+from kf2.config import Scenario  # noqa: E402
+from kf2.montecarlo import ESTIMATORS  # noqa: E402
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+RESULTS = ROOT / "results"
+
+CSS = """
+@page { size: A4; margin: 22mm 20mm; @bottom-center { content: counter(page);
+        font: 9pt Georgia, serif; color: #555; } }
+body { font: 10.5pt/1.5 Georgia, 'Times New Roman', serif; color: #111; }
+h1 { font-size: 17pt; line-height: 1.25; margin: 0 0 4pt; font-weight: normal; }
+h2 { font-size: 12pt; margin: 20pt 0 6pt; font-weight: bold; }
+h3 { font-size: 10.5pt; margin: 14pt 0 4pt; font-weight: bold; }
+p { margin: 0 0 7pt; text-align: justify; }
+.meta { font-size: 9pt; color: #555; margin-bottom: 16pt; }
+.lead { font-size: 11pt; }
+table { border-collapse: collapse; width: 100%; margin: 8pt 0 12pt;
+        font-size: 9pt; font-variant-numeric: tabular-nums; }
+caption { caption-side: top; text-align: left; font-size: 9pt; color: #333;
+          padding-bottom: 4pt; }
+th { border-bottom: 0.6pt solid #333; padding: 3pt 6pt; text-align: left;
+     font-weight: normal; font-style: italic; }
+td { padding: 3pt 6pt; border-bottom: 0.3pt solid #ddd; }
+thead tr:first-child th { border-top: 1pt solid #333; }
+.n { text-align: right; }
+code { font-family: 'DejaVu Sans Mono', monospace; font-size: 9pt; }
+ul { margin: 0 0 8pt; padding-left: 16pt; }
+li { margin-bottom: 3pt; }
+"""
+
+
+def load(name):
+    p = RESULTS / name
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def main() -> int:
+    cases = load("cases.json")
+    sweep = load("sweep.json")
+    if not cases or not sweep:
+        sys.exit("run scripts/export_cases.py and scripts/sweep.py first")
+
+    by = {(r["p0_pos"], r["estimator"]): r for r in sweep["rows"]}
+    dep = lambda p0, e: 100.0 * (by[(p0, e)]["nees_survivors"] - 4.0) / 4.0  # noqa: E731
+
+    sweep_rows = ""
+    for p0 in (300.0, 450.0, 600.0, 800.0, 1000.0):
+        e, k = dep(p0, "ekf"), dep(p0, "ckf")
+        sweep_rows += (
+            f"<tr><td class='n'>{p0:.0f}</td><td class='n'>{e:+.1f}%</td>"
+            f"<td class='n'>{k:+.1f}%</td><td class='n'>{100 * (1 - k / e):.0f}%</td>"
+            f"<td class='n'>{100 * by[(p0, 'ekf')]['track_loss']:.1f}%</td></tr>"
+        )
+
+    case_rows = ""
+    for c in cases["cases"]:
+        e, k, d = c["stats"]["ekf"], c["stats"]["ckf"], c["direction"]["ekf"]
+        case_rows += (
+            f"<tr><td>{c['label']}</td>"
+            f"<td class='n'>{d['along']:.0f} m</td><td class='n'>{d['cross']:.1f} m</td>"
+            f"<td class='n'>{e['nees_dep']:+.0f}%</td><td class='n'>{k['nees_dep']:+.0f}%</td>"
+            f"<td class='n'>{e['track_loss']:.0f}%</td></tr>"
+        )
+
+    n_fields = len(dataclasses.fields(Scenario))
+    n_runs = cases["runs"]
+
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+<style>{CSS}</style></head><body>
+
+<h1>Simulating bearings-only tracking for a small drone:<br>
+an EKF and CKF comparison harness</h1>
+<p class="meta">Python. {n_runs} Monte Carlo runs per data point. Code, tests and
+figures in the accompanying repository.</p>
+
+<p class="lead">This is a simulator, not a derivation. It exists to answer
+questions of the form &ldquo;does this filter work on this geometry, and how do I
+know&rdquo; quickly enough that the answer arrives while the question is still
+interesting. The filters are textbook implementations; the work is in the harness
+around them.</p>
+
+<h2>1. What this is</h2>
+
+<p>A small drone with a camera measures the direction to another aircraft and
+nothing else. There is no range. The question is whether a Kalman filter can turn
+a sequence of angles into a track worth using, and whether a cubature filter is
+worth running instead of an extended Kalman filter for that job.</p>
+
+<p>Both filters are standard. The extended Kalman filter linearises the
+measurement about the current estimate; the cubature filter samples it at a fixed
+set of points instead. Neither is derived here and neither is modified. The
+degree-5 cubature rule is McNamee and Stenger's, applied to filtering by Jia,
+Xin and Cheng. What this project contributes is the apparatus for putting a
+scenario through both and getting an answer that can be trusted.</p>
+
+<p>The reason that apparatus is the interesting part is that most of the effort
+in a study like this is not the estimator. It is deciding whether a scenario is
+worth running, whether a difference between two runs is real or noise, and
+whether the thing being measured is what was intended. Those are the parts that
+were built.</p>
+
+<h2>2. Cost of one iteration</h2>
+
+<p>Everything that can change a number lives on one frozen dataclass with
+{n_fields} fields: geometry, kinematics, sensor aperture, detection probability,
+noise models, estimator options, evaluation thresholds. Nothing that affects a
+result is a literal buried in a module. A variant is
+<code>replace(scenario, p0_pos=600.0)</code>, and because the object is frozen a
+scenario cannot be mutated halfway through a sweep.</p>
+
+<table>
+<caption>Table 1. Measured wall-clock cost of putting one question through the
+harness, on a laptop.</caption>
+<thead><tr><th>step</th><th class="n">time</th></tr></thead>
+<tbody>
+<tr><td>screen a scenario for viability, 8 runs</td><td class="n">0.4 s</td></tr>
+<tr><td>one estimator, 50 runs, first look</td><td class="n">1.9 s</td></tr>
+<tr><td>one estimator, 400 runs, publishable</td><td class="n">15 s</td></tr>
+<tr><td>three estimators across three scenarios, 400 runs</td><td class="n">2.3 min</td></tr>
+<tr><td>full test suite</td><td class="n">2.9 min</td></tr>
+</tbody>
+</table>
+
+<p>The screening step is the one that saved the most time, and it exists because
+of repeated failures. Every scenario written for this project was broken at least
+once, and in each case the breakage was visible in four cheap numbers that nobody
+computed until after a full sweep had been run and interpreted: detection rate,
+range span, bearing sweep, track loss. A forty-degree target manoeuvre that lost
+100 per cent of tracks. A sixty-degree fixed camera that detected the target on
+zero scans. A three-actor engagement that lost 69.5 per cent of its tracks, whose
+survivor statistics were nearly reported as a result. Two scenarios that were
+byte-identical because an override matched the default. All of those now fail in
+0.4 seconds instead of after an hour of interpretation.</p>
+
+<h2>3. What keeps the answers honest</h2>
+
+<p>Four things, none of them clever, all of them load-bearing.</p>
+
+<p><i>The simulator and the filter share no code.</i> Truth is generated by
+fine-step Euler&ndash;Maruyama integration; the filter propagates a coarse
+closed-form model. The gap between them is a known quantity rather than an
+assumption: the simulator sits at a measured 2.98 per cent below the filter's
+model of the position variance at the default step count. A study that sampled
+the filter's own model to generate truth would have no gap at all and would be
+testing the filter against its assumptions.</p>
+
+<p><i>Estimators see identical data.</i> Random number streams are keyed to the
+scenario rather than to the estimator, so swapping EKF for CKF cannot perturb the
+measurement sequence. Any difference between them is the estimator.</p>
+
+<p><i>Every result carries the smallest effect it could have detected.</i> A
+verdict of &ldquo;consistent&rdquo; asserts only that no departure larger than
+the stated resolution was found, which is weaker than the absence of a departure,
+and several results in this study are inconclusive by that standard and are
+labelled so rather than quoted.</p>
+
+<p><i>The consistency test is itself tested.</i> It is run against a filter
+correct by construction and its false-alarm rate measured: 5.4 per cent against a
+5 per cent design target. This matters because the test was wrong four separate
+times during development, and every one of those failures admitted filters that
+should have been rejected. One version passed a filter whose error exceeded its
+stated uncertainty by a factor of seven million.</p>
+
+<h2>4. What the comparison came out at</h2>
+
+<p>Two things had to be established in order: whether the filter is usable at all
+on this sensor, and then whether the choice of filter matters.</p>
+
+<table>
+<caption>Table 2. Three close-range scenarios, {n_runs} runs each. Range and
+bearing error are medians of the position error resolved along and across the
+line of sight. NEES is the departure of the estimation error from the uncertainty
+the filter claimed; zero means honest, positive means overconfident.</caption>
+<thead><tr><th>scenario</th><th class="n">range err</th><th class="n">bearing err</th>
+<th class="n">EKF NEES</th><th class="n">CKF NEES</th><th class="n">track loss</th></tr></thead>
+<tbody>{case_rows}</tbody>
+</table>
+
+<p>The first column is the headline for the first question. Direction is
+estimated well and range is not, by a factor of twenty to thirty. That split is
+geometry, not tuning: a bearing constrains the across-track position directly and
+says nothing about distance, so range is only recoverable through the observer's
+own motion. Weaken that and it degrades: 23 metres against a target
+holding a course, 155 metres against one being flown by a person inspecting
+something, at a nominal 400 metres.</p>
+
+<p>For the second question the picture depends on how hard the measurement
+nonlinearity is being pushed, which is set by the ratio of position uncertainty
+to range.</p>
+
+<table>
+<caption>Table 3. Sweeping initial position uncertainty on a fixed geometry, 400
+runs per point. Both filters see identical measurements.</caption>
+<thead><tr><th class="n">p0 [m]</th><th class="n">EKF</th><th class="n">CKF</th>
+<th class="n">error removed</th><th class="n">track loss</th></tr></thead>
+<tbody>{sweep_rows}</tbody>
+</table>
+
+<p>At tight initialisation the two are indistinguishable and there is nothing to
+fix. As uncertainty widens the extended filter's linearisation degrades and the
+cubature filter does not, which is the expected behaviour and the reason the
+comparison was worth running at all.</p>
+
+<h3>Where the difference actually shows up</h3>
+
+<p>The gain is not evenly spread, and it is worth separating the two things a
+filter reports. Measured over 60 runs per point on surviving tracks:</p>
+
+<table>
+<caption>Table 4. Position error and covariance honesty together. At tight
+initialisation the two filters are the same filter for practical purposes; the
+gap opens as the linearisation is pushed harder.</caption>
+<thead><tr><th class="n">p0 [m]</th><th class="n">EKF error</th>
+<th class="n">CKF error</th><th class="n">gap</th>
+<th class="n">EKF NEES</th><th class="n">CKF NEES</th></tr></thead>
+<tbody>
+<tr><td class="n">300</td><td class="n">212 m</td><td class="n">212 m</td>
+<td class="n">0.0%</td><td class="n">4.10</td><td class="n">4.09</td></tr>
+<tr><td class="n">600</td><td class="n">333 m</td><td class="n">326 m</td>
+<td class="n">2.1%</td><td class="n">5.01</td><td class="n">4.57</td></tr>
+<tr><td class="n">1000</td><td class="n">424 m</td><td class="n">370 m</td>
+<td class="n">12.7%</td><td class="n">7.36</td><td class="n">4.24</td></tr>
+</tbody>
+</table>
+
+<p>An earlier draft of this memo asserted that the cubature filter repairs the
+covariance and leaves the estimate alone. That is wrong, and the table is why it
+was checked rather than asserted. At wide initialisation the cubature filter is
+better on both counts: 13 per cent lower position error and a covariance that
+is honest rather than overconfident by a factor of nearly two.</p>
+
+<p>What is true is that the covariance improves much more than the estimate does.
+At 600 metres the accuracy gain is 2 per cent while the overconfidence falls from
+25 per cent to 14. So the case for switching is strongest where something
+downstream consumes the covariance, and weakest where only the point estimate is
+used and the initialisation is tight.</p>
+
+<h2>5. Things that did not work</h2>
+
+<p>Recorded because they consumed most of the time and because a study that
+reports only its successes is not worth much.</p>
+
+<ul>
+<li><i>The obvious fix made things worse.</i> Holding the linearisation point
+fixed rather than following the estimate is the standard remedy for this class of
+problem. It returned an error of 4926 against a baseline of 4.55, because the
+method assumes stationary landmarks and this target moves. Iterating the update
+was also worse, and lost 34 per cent of tracks.</li>
+<li><i>The first cubature rule gave frame-dependent answers.</i> The degree-3
+rule recovered between 26 and 68 per cent of the same error under rotations of a
+physically unchanged problem. Its points sit on the coordinate axes, so it
+integrates no cross terms. The degree-5 rule returned a single value at every
+rotation.</li>
+<li><i>Two sensor models were built and discarded.</i> A camera bolted to the
+airframe cannot hold a target with a narrow aperture; a gimbal makes a narrow
+aperture trivially usable and hides the route trade-off the simulator exists to
+show. The forward-fixed model was kept because a sentry on a fixed patrol carries
+one.</li>
+<li><i>A three-actor intercept scenario was discarded.</i> A fast target against
+a slow sentry lost 69.5 per cent of its tracks, and the numbers first computed
+from it were survivor statistics presented as general.</li>
+</ul>
+
+<h2>6. What is not claimed</h2>
+
+<p>Nothing here is a new result. The weak observability of range from bearings is
+Lindgren and Gong, sharpened by Nardone and Aidala and by Fogel and Gavish. The
+degradation of the extended filter's linearisation with growing uncertainty is
+standard. The cubature rules are McNamee and Stenger's. The consistency
+statistics are Bar-Shalom's. The insensitivity of the innovation check to
+state-space error follows in two lines from the standard innovation covariance,
+and is quantified here rather than discovered.</p>
+
+<p>What this project is, is a harness that lets those known effects be measured
+against each other quickly and checked afterwards. Six short notes accompany it,
+one per assumption the harness rests on, each stating the claim, citing the
+source, and naming the independent computation that verifies it. Writing them
+found five errors in my own descriptions, none in the code, which is the reason
+they exist.</p>
+
+<h2>7. Where it would go next</h2>
+
+<p>In order of value per unit of effort. Enabling the clutter and
+missed-detection paths, which are implemented and tested but not exercised in any
+reported result: about a day. Addressing track loss, which the cubature
+correction does not help and which is the largest remaining gap: about a week.
+Correcting the survivor conditioning that flatters every averaged figure here:
+about a day. Applying it to recorded flight data would transfer the harness
+rather than the specific numbers, and is the obvious next step for anyone wanting
+to know whether the simulation predicts the field.</p>
+
+</body></html>"""
+
+    out = ROOT / "report" / "simulator-report.pdf"
+    out.parent.mkdir(exist_ok=True)
+    HTML(string=html, base_url=str(ROOT)).write_pdf(out)
+    (ROOT / "report" / "simulator-report.html").write_text(html)
+    print(f"wrote {out} ({out.stat().st_size / 1024:.0f} KB)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+
+# Large intermediate arrays. The JSON results the report and the viewer read
+# are committed; these are regenerable with scripts/sweep.py.
+results/*.npz

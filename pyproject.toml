@@ -1,0 +1,14 @@
+[project]
+name = "kf2"
+version = "0.1.0"
+description = "Observability-aware consistency monitoring for passive AOA tracking"
+requires-python = ">=3.10"
+dependencies = ["numpy>=2.0", "scipy>=1.13"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["error::RuntimeWarning"]
+
+[tool.ruff]
+line-length = 100
