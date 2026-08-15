@@ -48,35 +48,24 @@ def cases():
     """
     return [
         dict(key="inspecting", label="Intruder inspecting",
-             blurb="A person is flying the intruder around something they want to look at: it "
-                   "holds a heading for a few seconds, stops, then moves off on another. The "
-                   "sentry points at it to within a few metres of cross-range and has almost no "
-                   "idea how far away it is. Range is not recoverable here at any amount of "
-                   "own-ship manoeuvre, because the target's unpredictability absorbs the "
-                   "parallax the patrol route generates.",
+             blurb="A hand-flown intruder that keeps changing heading absorbs the parallax the "
+                   "patrol route generates, so the sentry holds cross-range to a few metres and "
+                   "never recovers range.",
              sc=INSPECTING),
         dict(key="transiting", label="Intruder transiting",
-             blurb="The same patrol, the same sensor, the same geometry, but the intruder is "
-                   "crossing on a steady course. That single change is worth roughly five times "
-                   "in range accuracy. The filter's constant-velocity assumption is now true, so "
-                   "the observer's manoeuvre becomes a usable ruler.",
+             blurb="The same patrol and geometry with the intruder crossing on a steady course, "
+                   "which makes the filter's constant-velocity assumption true and is worth "
+                   "roughly five times in range accuracy.",
              sc=TRANSITING),
         dict(key="straight", label="Patrol flies straight",
-             blurb="A steady intruder again, but the patrol route has no weave. Without own-ship "
-                   "acceleration there is no parallax, and range degrades even though the target "
-                   "is behaving perfectly. Both ingredients are needed and neither substitutes "
-                   "for the other.",
+             blurb="A steady intruder again, but with no weave in the patrol route there is no "
+                   "parallax and range degrades anyway.",
              sc=STRAIGHT_ROUTE),
         dict(key="pursuing", label="Patrol turns to pursue",
-             blurb="The sentry turns toward the intruder the moment it sees it, and keeps "
-                   "turning toward the latest measured bearing. The intruder holds a course "
-                   "with a weave on top. This is what an operator would do, and it buys a "
-                   "great deal: the target never leaves the frame, detection goes from half "
-                   "the scans to all of them, and the range closes from 728 m to 235 m. It "
-                   "also makes range estimation worse. Flying at something accelerates along "
-                   "the line of sight, and only acceleration across the line of sight makes "
-                   "range observable, so the sentry collects twice the measurements and "
-                   "learns less from them about distance.",
+             blurb="Turning toward the latest bearing keeps the target in frame and closes the "
+                   "range from 291 m to 97 m, but flying at something accelerates along the "
+                   "line of sight rather than across it, so the sentry collects twice the "
+                   "measurements and learns less about distance.",
              sc=PURSUING),
     ]
 
@@ -143,14 +132,28 @@ def directional_error(sc, runs):
     Measured after the first third of the run so the initial transient is not
     counted, and reported as medians because the along-sight distribution has a
     long tail wherever range is weakly observable.
+
+    ``along_start`` and ``along_end`` are the same statistic over the first and
+    last 15% of the run instead, which is what answers "did the filter learn the
+    range or not". A case can end worse than it started; two of these do, and a
+    figure quoted only after the transient hides that.
+
+    ``in_frame`` is the fraction of scans holding the target at all. It belongs
+    beside the error because the geometry that ranges well and the geometry that
+    keeps the target in frame are not the same one, and the README's claim to
+    that effect has to come from somewhere.
     """
     th = gate_threshold(sc.gate_prob, dim=1)
+    n0, n1 = int(0.15 * sc.steps), int(0.85 * sc.steps)
     out = {}
+    seen = []
     for name in ("ekf", "ckf"):
-        along, cross = [], []
+        along, cross, early, late = [], [], [], []
         for run in range(runs):
             truth = datagen.target_truth(sc, run)
             own, det = datagen.engagement(sc, truth, run)
+            if name == "ekf":
+                seen.append(np.mean([np.asarray(s).size > 0 for s in det.per_step[1:]]))
             f = ESTIMATORS[name](sc)
             f.initialise(datagen.initial_estimate(sc, truth[0], run), datagen.initial_covariance(sc))
             for k in range(1, sc.steps + 1):
@@ -158,18 +161,26 @@ def directional_error(sc, runs):
                 a = associate(f, own.xy[k], det.per_step[k], th)
                 if a.accepted:
                     f.update(a.z, own.xy[k])
+                e = truth[k, :2] - f.state[:2]
+                los = np.arctan2(f.state[1] - own.y[k], f.state[0] - own.x[k])
+                u = np.array([np.cos(los), np.sin(los)])
                 if k > sc.steps // 3:
-                    e = truth[k, :2] - f.state[:2]
-                    los = np.arctan2(f.state[1] - own.y[k], f.state[0] - own.x[k])
-                    u = np.array([np.cos(los), np.sin(los)])
                     along.append(abs(float(e @ u)))
                     cross.append(abs(float(e @ np.array([-u[1], u[0]]))))
+                if k <= n0:
+                    early.append(abs(float(e @ u)))
+                elif k >= n1:
+                    late.append(abs(float(e @ u)))
+        a0, a1 = float(np.median(early)), float(np.median(late))
         out[name] = dict(
             along=round(float(np.median(along)), 1),
             cross=round(float(np.median(cross)), 1),
             along_p90=round(float(np.percentile(along, 90)), 1),
             cross_p90=round(float(np.percentile(cross, 90)), 1),
+            along_start=round(a0, 1), along_end=round(a1, 1),
+            range_improved_pct=round(100.0 * (1.0 - a1 / a0), 1),
         )
+    out["in_frame"] = round(100.0 * float(np.mean(seen)), 1)
     return out
 
 

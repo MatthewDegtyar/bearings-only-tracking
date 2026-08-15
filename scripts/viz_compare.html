@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Bearings-only tracking: scenario playback</title>
 
 <style>
@@ -169,11 +170,8 @@
       <div class="eyebrow">Bearings-only tracking</div>
       <h1>Where the filter is wrong and cannot tell you</h1>
       <p class="standfirst">
-        A sensor that measures only direction leaves range weakly determined, so the filter's
-        uncertainty stretches along the line of sight where the measurement carries no information.
-        Each scenario runs the same estimator on a different geometry. The two figures beside each
-        name are the error the filter actually made and the error its own runtime check reported.
-        The gap between them is the finding.
+        A test of the EKF against a cubature filter for vision-based tracking, where the sensor
+        returns bearing only and no range.
       </p>
       <p class="blurb" id="blurb"></p>
       <div class="facts" id="facts"></div>
@@ -231,36 +229,6 @@
       <div class="panel" id="ens-panel" hidden><h3>The correction, all runs <span id="p4"></span></h3><canvas id="s-ens"></canvas></div>
     </div>
 
-    <p class="note">
-      NEES compares the error the filter made against the uncertainty it claimed. The state holds
-      position and velocity in two dimensions, four numbers, so an honest filter averages 4. Above
-      that line it is overconfident. NIS compares each measurement against the filter's prediction
-      of it, needs no knowledge of the truth, and is therefore the only one of the two that exists
-      outside a simulator. A scenario where NEES departs and NIS does not is one where the filter is
-      wrong and nothing on board would say so.
-    </p>
-    <p class="note">
-      Two contours are drawn per filter because a 1σ ellipse in two dimensions holds only 39 per
-      cent of the probability, not the 68 per cent most people picture. That figure is
-      one-dimensional and does not carry over: reaching 68 per cent in a plane takes 1.52σ, and 2.45σ is the 95 per cent contour. Even an
-      honest filter leaves the target outside the inner ellipse most of the time.
-    </p>
-    <p class="note" id="popnote" hidden>
-      The three panels above draw a single run. The last panel and the figures beside each scenario
-      name come from 400 runs, and they count differently on purpose: the sidebar averages over
-      tracks that survived, since a diverged track produces an arbitrarily large error that would
-      swamp the mean, while the last panel averages every run including the ones that were lost.
-      Where nothing is lost the two agree exactly. Where tracks are lost they do not, and the gap
-      is the size of that problem rather than a discrepancy to reconcile.
-    </p>
-    <p class="note">
-      The green track is the correction, the same filter with the straight-line approximation of the
-      measurement replaced by a fifth-degree cubature rule, on byte-identical measurements. On any
-      single run the difference between the two is mostly noise, which is why the figures beside
-      each scenario name come from hundreds of runs and carry the smallest effect those runs could
-      resolve. Where a scenario reads not resolved, the run count could not separate the effect from
-      noise, and it should be read as a question rather than a result.
-    </p>
     <p class="note" id="shotnote" hidden>
       In the intercept scenario the purple track carries no sensor. It is vectored entirely on the
       sentry's estimate, and its aim point is frozen at commit, so whatever the sentry believed at
@@ -849,7 +817,6 @@
       const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
       const e = mean(ens.nees.ekf), f = mean(ens.nees.ckf);
       $("p4").textContent = "p0 = " + ens.p0 + " m, " + Math.round(100 * (1 - (f - 4) / (e - 4))) + "% removed";
-      $("popnote").hidden = false;
     }
   }
 

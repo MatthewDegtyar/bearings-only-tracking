@@ -183,7 +183,11 @@ def test_patrol_geometry_is_not_degenerate():
     for run in range(8):
         truth = datagen.target_truth(sc, run)
         r = datagen.target_range(truth, own)
-        assert 100.0 < r.min() and r.max() < 800.0, f"range {r.min():.0f}-{r.max():.0f} m"
+        # Drone scale means what a consumer camera can hold: a 0.5 m airframe is
+        # three pixels at 520 m, so a geometry that runs past 320 m is measuring
+        # a sensor nobody has. The floor catches the opposite failure, an
+        # intruder that wanders into the observer's lap.
+        assert 40.0 < r.min() and r.max() < 320.0, f"range {r.min():.0f}-{r.max():.0f} m"
         b = datagen.bearing(truth[:, :2], own.xy)
         spreads.append(np.degrees(np.ptp(datagen.wrap_pi(b - b[0]))))
         det = datagen.generate_detections(sc, truth, own, run)

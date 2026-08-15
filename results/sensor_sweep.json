@@ -1,0 +1,186 @@
+{
+ "sigmas": [
+  0.1,
+  0.25,
+  0.5,
+  1.0
+ ],
+ "runs": 100,
+ "probe_runs": 60,
+ "cases": {
+  "transiting": [
+   {
+    "along": 7.94,
+    "along_claimed": 15.08,
+    "cross": 0.49,
+    "cross_claimed": 1.32,
+    "overconfidence": 0.53,
+    "rejected": 4.6,
+    "sigma": 0.1,
+    "track_loss": 5.0
+   },
+   {
+    "along": 8.84,
+    "along_claimed": 16.92,
+    "cross": 0.69,
+    "cross_claimed": 1.64,
+    "overconfidence": 0.52,
+    "rejected": 1.55,
+    "sigma": 0.25,
+    "track_loss": 3.0
+   },
+   {
+    "along": 9.26,
+    "along_claimed": 19.13,
+    "cross": 1.0,
+    "cross_claimed": 2.12,
+    "overconfidence": 0.48,
+    "rejected": 0.01,
+    "sigma": 0.5,
+    "track_loss": 2.0
+   },
+   {
+    "along": 10.32,
+    "along_claimed": 22.28,
+    "cross": 1.48,
+    "cross_claimed": 2.97,
+    "overconfidence": 0.46,
+    "rejected": 0.01,
+    "sigma": 1.0,
+    "track_loss": 6.0
+   }
+  ],
+  "straight": [
+   {
+    "along": 31.05,
+    "along_claimed": 22.03,
+    "cross": 0.54,
+    "cross_claimed": 2.41,
+    "overconfidence": 1.41,
+    "rejected": 0.01,
+    "sigma": 0.1,
+    "track_loss": 2.0
+   },
+   {
+    "along": 29.54,
+    "along_claimed": 24.48,
+    "cross": 0.69,
+    "cross_claimed": 2.82,
+    "overconfidence": 1.21,
+    "rejected": 0.01,
+    "sigma": 0.25,
+    "track_loss": 2.0
+   },
+   {
+    "along": 28.42,
+    "along_claimed": 27.66,
+    "cross": 1.07,
+    "cross_claimed": 3.33,
+    "overconfidence": 1.03,
+    "rejected": 0.01,
+    "sigma": 0.5,
+    "track_loss": 2.0
+   },
+   {
+    "along": 31.42,
+    "along_claimed": 32.43,
+    "cross": 1.67,
+    "cross_claimed": 4.18,
+    "overconfidence": 0.97,
+    "rejected": 0.01,
+    "sigma": 1.0,
+    "track_loss": 3.0
+   }
+  ],
+  "inspecting": [
+   {
+    "along": 88.79,
+    "along_claimed": 36.72,
+    "cross": 3.66,
+    "cross_claimed": 6.31,
+    "overconfidence": 2.42,
+    "rejected": 11.86,
+    "sigma": 0.1,
+    "track_loss": 58.0
+   },
+   {
+    "along": 62.52,
+    "along_claimed": 37.36,
+    "cross": 2.12,
+    "cross_claimed": 4.89,
+    "overconfidence": 1.67,
+    "rejected": 2.39,
+    "sigma": 0.25,
+    "track_loss": 44.0
+   },
+   {
+    "along": 51.78,
+    "along_claimed": 42.73,
+    "cross": 2.07,
+    "cross_claimed": 5.34,
+    "overconfidence": 1.21,
+    "rejected": 1.17,
+    "sigma": 0.5,
+    "track_loss": 37.0
+   },
+   {
+    "along": 51.59,
+    "along_claimed": 51.3,
+    "cross": 2.65,
+    "cross_claimed": 5.98,
+    "overconfidence": 1.01,
+    "rejected": 0.39,
+    "sigma": 1.0,
+    "track_loss": 35.0
+   }
+  ]
+ },
+ "controls": {
+  "wide_gate": [
+   {
+    "sigma": 0.5,
+    "along": 50.52,
+    "along_claimed": 42.68,
+    "cross": 1.99,
+    "cross_claimed": 5.18,
+    "overconfidence": 1.18,
+    "rejected": 0.61,
+    "track_loss": 36.0
+   },
+   {
+    "sigma": 0.1,
+    "along": 76.25,
+    "along_claimed": 32.2,
+    "cross": 1.66,
+    "cross_claimed": 4.19,
+    "overconfidence": 2.37,
+    "rejected": 1.83,
+    "track_loss": 53.0
+   }
+  ],
+  "estimators": {
+   "ekf": [
+    37.0,
+    58.0
+   ],
+   "ckf": [
+    44.0,
+    58.0
+   ],
+   "oracle": [
+    80.0,
+    95.0
+   ]
+  },
+  "cv_control": {
+   "filter q as shipped": [
+    63.0,
+    91.0
+   ],
+   "filter q matched": [
+    12.0,
+    17.0
+   ]
+  }
+ }
+}
